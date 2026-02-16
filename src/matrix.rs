@@ -56,6 +56,7 @@ use crate::skill::SkillRegistry;
 use crate::soul::Soul;
 use crate::tools;
 
+use matrix_sdk::ruma::events::room::member::StrippedRoomMemberEvent;
 use matrix_sdk::{
     config::SyncSettings,
     room::Room,
@@ -155,6 +156,19 @@ pub async fn run_event_loop(
     let config = config.clone();
     let bot_id = bot_user_id.clone();
 
+    // --- AUTO-JOIN HANDLER ---
+    // Listens for invites and accepts them automatically.
+    client.add_event_handler(
+        |event: StrippedRoomMemberEvent, room: Room| async move {
+            if event.content.membership == matrix_sdk::ruma::events::room::member::MembershipState::Invite {
+                info!("Auto-joining room {}", room.room_id());
+                if let Err(e) = room.join().await {
+                    error!("Failed to auto-join room: {}", e);
+                }
+            }
+        },
+    );
+
     // Register the message event handler
     client.add_event_handler(
         move |event: OriginalSyncRoomMessageEvent, room: Room| {
@@ -171,31 +185,35 @@ pub async fn run_event_loop(
             let bot_id = bot_id.clone();
 
             async move {
+
+
                 // --- IGNORE SELF-MESSAGES ---
-                // Without this, the bot would respond to its own responses,
-                // creating an infinite loop. Energy waste: infinite.
                 if event.sender.to_string() == bot_id {
                     return;
                 }
 
+                // --- ROBUSTNESS: IGNORE SERVER/SYSTEM MESSAGES ---
+                // 1. Ignore messages from the server itself (e.g. @server:domain.com)
+                if event.sender.as_str().starts_with("@server:") || event.sender.as_str() == "@matrixbot:matrix.org" {
+                     info!(sender = %event.sender, "Ignoring server/system message");
+                     return;
+                }
+
                 // --- EXTRACT MESSAGE TEXT ---
-                // Strip HTML and rich formatting to save LLM tokens.
-                // A formatted message with HTML tags can be 2-3x larger than
-                // the raw text. Stripping saves tokens → saves API cost → saves energy.
                 let body = match &event.content.msgtype {
                     MessageType::Text(text) => {
-                        // Prefer the formatted body if available, then strip HTML
+                        // ROBUSTNESS: Ignore m.notice (used by bots/bridges for alerts)
+                        if matches!(event.content.msgtype, MessageType::Notice(_)) {
+                            return;
+                        }
+
                         if let Some(formatted) = &text.formatted {
                             formatter::strip_html(&formatted.body)
                         } else {
                             text.body.clone()
                         }
                     }
-                    _ => {
-                        // Ignore non-text messages (images, videos, etc.)
-                        // These would need multimodal processing — future work.
-                        return;
-                    }
+                    _ => return, // Ignore non-text
                 };
 
                 let room_id_str = room.room_id().to_string();
@@ -206,10 +224,11 @@ pub async fn run_event_loop(
                     "Received message"
                 );
 
+                // ... (Rest of processing) ...
+                
                 // --- DETECT PLATFORM ---
                 let platform = formatter::detect_platform(&room_id_str);
-                info!(platform = ?platform, "Detected platform");
-
+                
                 // --- SESSION MANAGEMENT ---
                 let session_context = {
                     let mut sessions = sessions.lock().await;
@@ -235,7 +254,7 @@ pub async fn run_event_loop(
                 // --- RECALL LONG-TERM MEMORIES ---
                 let memory_context = {
                     let mem = memory.lock().await;
-                    mem.summarize_for_context(&room_id_str, 200) // 200 token budget
+                    mem.summarize_for_context(&room_id_str, 200)
                         .unwrap_or(None)
                 };
 
@@ -255,7 +274,7 @@ pub async fn run_event_loop(
                 });
                 messages.extend(context);
 
-                // --- INFERENCE (with automatic cloud→local failover) ---
+                // --- INFERENCE ---
                 let tool_schema = skills.to_tool_schema();
                 let response = match engine
                     .infer(
@@ -269,41 +288,22 @@ pub async fn run_event_loop(
                     Ok(resp) => resp,
                     Err(e) => {
                         error!(error = %e, "All inference engines failed");
-                        "I'm sorry, I'm currently unable to process your request. \
-                         Both cloud and local inference are unavailable."
-                            .to_string()
+                        "I'm sorry, I'm currently unable to process your request.".to_string()
                     }
                 };
 
                 // --- TOOL EXECUTION ---
-                // Check if the LLM wants to call any tools
                 let tool_calls = tools::parse_tool_calls(&response);
                 let final_response = if !tool_calls.is_empty() {
                     info!(count = tool_calls.len(), "Executing tool calls");
+                    let tool_output = tools::execute_tool_calls(&tool_calls, &skills, mcp.as_deref()).await;
+                    
+                    messages.push(ChatMessage { role: "assistant".to_string(), content: response.clone() });
+                    messages.push(ChatMessage { role: "system".to_string(), content: format!("Tool execution results:\n{}", tool_output) });
 
-                    let tool_output = tools::execute_tool_calls(
-                        &tool_calls,
-                        &skills,
-                        mcp.as_deref(),
-                    )
-                    .await;
-
-                    // Re-infer with tool results
-                    messages.push(ChatMessage {
-                        role: "assistant".to_string(),
-                        content: response.clone(),
-                    });
-                    messages.push(ChatMessage {
-                        role: "system".to_string(),
-                        content: format!("Tool execution results:\n{}", tool_output),
-                    });
-
-                    match engine
-                        .infer(messages.clone(), None, soul.temperature, soul.max_tokens)
-                        .await
-                    {
+                    match engine.infer(messages.clone(), None, soul.temperature, soul.max_tokens).await {
                         Ok(resp) => resp,
-                        Err(_) => response, // Fallback to the original response
+                        Err(_) => response,
                     }
                 } else {
                     response
@@ -312,7 +312,7 @@ pub async fn run_event_loop(
                 // --- FORMAT FOR PLATFORM ---
                 let formatted = formatter::format_response(&final_response, platform);
 
-                // --- STORE ASSISTANT RESPONSE IN CONTEXT DB ---
+                // --- STORE ASSISTANT RESPONSE ---
                 {
                     let db = db.lock().await;
                     if let Err(e) = db.append_message(&room_id_str, "assistant", &formatted) {
@@ -320,78 +320,45 @@ pub async fn run_event_loop(
                     }
                 }
 
-                // --- SEND REPLY ---
+                // --- SEND REPLY (ROBUSTNESS: 403 HANDLING) ---
                 let content = RoomMessageEventContent::text_plain(&formatted);
-                if let Err(e) = room.send(content).await {
-                    error!(
-                        error = %e,
-                        room_id = %room_id_str,
-                        "Failed to send reply to Matrix room"
-                    );
-                } else {
-                    info!(
-                        room_id = %room_id_str,
-                        platform = ?platform,
-                        response_len = formatted.len(),
-                        "Reply sent successfully"
-                    );
+                match room.send(content).await {
+                    Ok(_) => info!(room_id = %room_id_str, "Reply sent successfully"),
+                    Err(e) => {
+                        // Check for 403 Forbidden (e.g. read-only rooms, kicked, etc.)
+                        let error_msg = e.to_string();
+                        if error_msg.contains("403") || error_msg.contains("M_FORBIDDEN") {
+                            warn!(
+                                room_id = %room_id_str, 
+                                error = %e, 
+                                "Permission denied (403). Ignoring to prevent crash loop."
+                            );
+                        } else {
+                            error!(error = %e, "Failed to send reply to Matrix room");
+                        }
+                    }
                 }
-
+                
                 // --- UPLOAD GENERATED MEDIA (if any) ---
-                // Check if any tool calls generated media files.
-                // Media skills return JSON with a "file_path" key.
                 for tc in &tool_calls {
                     if tc.name == "generate_image" || tc.name == "generate_video" {
-                        // Re-execute is not needed — the result was already obtained above.
-                        // We parse the tool output to find the file path.
                         if let Some(skill_out) = skills.dispatch(tc) {
                             if !skill_out.is_error {
                                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&skill_out.output) {
                                     if let Some(file_path) = parsed["file_path"].as_str() {
                                         let path = std::path::Path::new(file_path);
                                         if path.exists() {
-                                            let mime_str = parsed["mime_type"]
-                                                .as_str()
-                                                .unwrap_or("application/octet-stream");
-                                            info!(
-                                                path = %file_path,
-                                                mime = %mime_str,
-                                                "Uploading generated media to Matrix room"
-                                            );
-                                            match std::fs::read(path) {
-                                                Ok(data) => {
-                                                    let filename = path
-                                                        .file_name()
-                                                        .map(|f| f.to_string_lossy().to_string())
-                                                        .unwrap_or_else(|| "media".to_string());
-
-                                                    let content_type: mime::Mime = mime_str
-                                                        .parse()
-                                                        .unwrap_or(mime::APPLICATION_OCTET_STREAM);
-
-                                                    // Upload the raw bytes as an attachment
-                                                    let attachment_config = matrix_sdk::attachment::AttachmentConfig::new();
-                                                    if let Err(e) = room
-                                                        .send_attachment(
-                                                            &filename,
-                                                            &content_type,
-                                                            data,
-                                                            attachment_config,
-                                                        )
-                                                        .await
-                                                    {
-                                                        error!(
-                                                            error = %e,
-                                                            "Failed to upload media to Matrix"
-                                                        );
-                                                    } else {
-                                                        info!("Media uploaded successfully");
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    warn!(error = %e, "Failed to read generated media file");
-                                                }
-                                            }
+                                             let mime_str = parsed["mime_type"].as_str().unwrap_or("application/octet-stream");
+                                             let content_type: mime::Mime = mime_str.parse().unwrap_or(mime::APPLICATION_OCTET_STREAM);
+                                             let filename = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| "media".to_string());
+                                             
+                                             let attachment_config = matrix_sdk::attachment::AttachmentConfig::new();
+                                             // Read file content
+                                             if let Ok(data) = std::fs::read(path) {
+                                                 if let Err(e) = room.send_attachment(&filename, &content_type, data, attachment_config).await {
+                                                     error!(error = %e, "Failed to upload media");
+                                                 }
+                                             }
                                         }
                                     }
                                 }
