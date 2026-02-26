@@ -1,23 +1,23 @@
-# Ultraclaw 🦀
+# Ultraclaw-Matrix 🦀
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Rust](https://img.shields.io/badge/rust-stable-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)
 ![Matrix](https://img.shields.io/badge/matrix-protocol-green.svg)
 
-**Ultraclaw** is a hyper-optimized, multimodal autonomous AI agent built in Rust. It bridges the gap between local high-performance inference and cloud-based creativity, living natively on the [Matrix](https://matrix.org/) network.
+**Ultraclaw-Matrix** is a hyper-optimized, multimodal autonomous AI agent built in Rust. It bridges the gap between local high-performance inference and cloud-based creativity, living natively on the [Matrix](https://matrix.org/) network.
 
 ---
 
 ## 🏗️ System Architecture
 
-Ultraclaw functions as a highly modular "Brain" that connects to the world via the Matrix protocol. Its core is an async event loop that processes messages, manages state, and dispatches tasks to specialized engines.
+Ultraclaw-Matrix functions as a highly modular "Brain" that connects to the world via the Matrix protocol. Its core is an async event loop that processes messages, manages state, and dispatches tasks to specialized engines.
 
 ```mermaid
 graph TD
     User((User)) <-->|Matrix Protocol| Matrix[Matrix Client]
     
-    subgraph "Ultraclaw Core"
+    subgraph "Ultraclaw-Matrix Core"
         Matrix <--> EventLoop[Event Loop]
         EventLoop <--> SessionMgr[Session Manager]
         EventLoop <--> Memory[Long-Term Memory DB]
@@ -52,7 +52,7 @@ graph TD
 
 ### 🌊 Message Flow: From User to Agent
 
-How Ultraclaw processes a single message:
+How Ultraclaw-Matrix processes a single message:
 
 ```mermaid
 sequenceDiagram
@@ -78,7 +78,7 @@ sequenceDiagram
 
 ## 🛠️ Installation Guide
 
-Follow these steps to get Ultraclaw running on your machine.
+Follow these steps to get Ultraclaw-Matrix running on your machine.
 
 ### Prerequisites
 
@@ -92,8 +92,8 @@ Follow these steps to get Ultraclaw running on your machine.
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/nishal21/Ultraclaw.git
-cd Ultraclaw
+git clone https://github.com/nishal21/Ultraclaw-Matrix.git
+cd Ultraclaw-Matrix
 ```
 
 ### Step 2: Compile the Binary
@@ -103,8 +103,8 @@ cargo build --release
 ```
 *   The first build may take a few minutes as it downloads dependencies.
 *   The binary will be located at:
-    *   **Windows**: `target\release\ultraclaw.exe`
-    *   **Linux/macOS**: `target/release/ultraclaw`
+    *   **Windows**: `target\release\Ultraclaw-Matrix.exe`
+    *   **Linux/macOS**: `target/release/Ultraclaw-Matrix`
 
 ### Step 3: Run the Onboarding Wizard
 We've built an interactive setup tool to make configuration easy.
@@ -126,7 +126,7 @@ Configuration is saved to `config.json` in the current directory.
 
 ## 🎮 Usage & Functionality
 
-Ultraclaw is a **Natural Language Agent**. You don't run commands; you just talk to it.
+Ultraclaw-Matrix is a **Natural Language Agent**. You don't run commands; you just talk to it.
 
 ### Core Capabilities
 *   **Chat**: "Who are you?", "Explain quantum physics."
@@ -137,7 +137,7 @@ Ultraclaw is a **Natural Language Agent**. You don't run commands; you just talk
     *   "Run `echo hello` in the shell." (Requires confirmation)
 
 ### 🎨 Media Generation
-Just ask for what you want. Ultraclaw intelligently selects the best provider.
+Just ask for what you want. Ultraclaw-Matrix intelligently selects the best provider.
 
 *   **Image**: "Generate a cyberpunk street scene." (Uses DALL-E 3, Stability, or Fal)
 *   **Video**: "Create a 5-second video of a drone flying over a mountain." (Uses Runway, Veo, or Luma)
@@ -150,28 +150,28 @@ Just ask for what you want. Ultraclaw intelligently selects the best provider.
 
 ## ⚙️ Configuration Reference
 
-Ultraclaw uses a hierarchy for configuration:
+Ultraclaw-Matrix uses a hierarchy for configuration:
 `Env Vars` > `config.json` > `.env file` > `Defaults`
 
 | Category | Variable | Description | Default |
 |---|---|---|---|
-| **Matrix** | `ULTRACLAW_HOMESERVER_URL` | URL of your Matrix server | `https://matrix.org` |
-| | `ULTRACLAW_MATRIX_USER` | Your full user ID | e.g. `@bot:matrix.org` |
-| | `ULTRACLAW_MATRIX_PASSWORD` | Your login password | - |
-| **Cloud AI** | `ULTRACLAW_CLOUD_API_KEY` | Key for OpenAI/Anthropic/etc | - |
-| | `ULTRACLAW_CLOUD_MODEL` | Model ID to use | `gpt-4o-mini` |
-| **Local AI** | `ULTRACLAW_CLOUD_BASE_URL` | Base URL for local inference | `http://localhost:11434/v1` |
-| | `ULTRACLAW_CLOUD_MODEL` | Local model name | `llama3` |
-| **Media** | `ULTRACLAW_STABILITY_API_KEY` | Stability AI Key | - |
-| | `ULTRACLAW_RUNWAY_API_KEY` | Runway ML Key | - |
-| | `ULTRACLAW_VEO_API_KEY` | Google Key (VideoFX) | - |
+| **Matrix** | `Ultraclaw-Matrix_HOMESERVER_URL` | URL of your Matrix server | `https://matrix.org` |
+| | `Ultraclaw-Matrix_MATRIX_USER` | Your full user ID | e.g. `@bot:matrix.org` |
+| | `Ultraclaw-Matrix_MATRIX_PASSWORD` | Your login password | - |
+| **Cloud AI** | `Ultraclaw-Matrix_CLOUD_API_KEY` | Key for OpenAI/Anthropic/etc | - |
+| | `Ultraclaw-Matrix_CLOUD_MODEL` | Model ID to use | `gpt-4o-mini` |
+| **Local AI** | `Ultraclaw-Matrix_CLOUD_BASE_URL` | Base URL for local inference | `http://localhost:11434/v1` |
+| | `Ultraclaw-Matrix_CLOUD_MODEL` | Local model name | `llama3` |
+| **Media** | `Ultraclaw-Matrix_STABILITY_API_KEY` | Stability AI Key | - |
+| | `Ultraclaw-Matrix_RUNWAY_API_KEY` | Runway ML Key | - |
+| | `Ultraclaw-Matrix_VEO_API_KEY` | Google Key (VideoFX) | - |
 | | ...and many more | See `.env.example` | - |
 
 ---
 
 ## 🖼️ Media Pipeline
 
-Ultraclaw supports **15+ generation providers**. It automatically routes requests based on your configured API keys and preferred provider settings.
+Ultraclaw-Matrix supports **15+ generation providers**. It automatically routes requests based on your configured API keys and preferred provider settings.
 
 ```mermaid
 graph LR
@@ -200,7 +200,7 @@ graph LR
 
 ## 🔗 Integrations (WhatsApp, Discord, etc.)
 
-Ultraclaw uses **Matrix Bridges** to talk to other apps. It sees everything as a Matrix room.
+Ultraclaw-Matrix uses **Matrix Bridges** to talk to other apps. It sees everything as a Matrix room.
 
 ### Method 1: Using a Hosted Provider (Easiest)
 Use a service like **Beeper** or **Element One** to manage the bridges for you.
@@ -209,8 +209,8 @@ Use a service like **Beeper** or **Element One** to manage the bridges for you.
 2.  **Connect Networks**: In the Beeper app, connect your WhatsApp, Discord, Telegram, etc.
 3.  **Get Credentials**:
     *   You need your Matrix username (e.g., `@user:beeper.com`) and an **Access Token** (or password).
-    *   *Tip: Use a dedicated "bot" account if possible, or log Ultraclaw in as you.*
-4.  **Configure Ultraclaw**:
+    *   *Tip: Use a dedicated "bot" account if possible, or log Ultraclaw-Matrix in as you.*
+4.  **Configure Ultraclaw-Matrix**:
     ```bash
     cargo run -- --init
     ```
@@ -218,7 +218,7 @@ Use a service like **Beeper** or **Element One** to manage the bridges for you.
     *   **Username**: `@your_username:beeper.com`
     *   **Password/Token**: Your login credentials.
 
-Ultraclaw will now see every chat in your Beeper inbox and can reply to them!
+Ultraclaw-Matrix will now see every chat in your Beeper inbox and can reply to them!
 
 ### Method 2: Self-Hosted (Advanced)
 If you run your own Matrix server (Synapse), you must install the bridges yourself.
@@ -235,9 +235,9 @@ If you run your own Matrix server (Synapse), you must install the bridges yourse
 4.  **Log In**:
     *   Start a chat with the bridge bot (e.g., `@whatsappbot:yourserver.com`).
     *   Scan the QR code to link your WhatsApp.
-5.  **Connect Ultraclaw**: Point Ultraclaw to your local homeserver (`http://localhost:8008`).
+5.  **Connect Ultraclaw-Matrix**: Point Ultraclaw-Matrix to your local homeserver (`http://localhost:8008`).
 
-Once bridged, Ultraclaw treats the bridged chats exactly like native Matrix rooms.
+Once bridged, Ultraclaw-Matrix treats the bridged chats exactly like native Matrix rooms.
 
 ---
 
